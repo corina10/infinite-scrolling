@@ -21,7 +21,7 @@
       (scrolledIndexChange)="onScrolledIndexChange($event)"
     >
       <app-comment-card
-        *cdkVirtualFor="let comment of dataSource; trackBy: trackById"
+        *cdkVirtualFor="let comment of provider.comments$; trackBy: trackById"
         [comment]="comment"
       />
     </cdk-virtual-scroll-viewport>

@@ -1,52 +1,47 @@
-import { DataSource, CollectionViewer, ListRange } from '@angular/cdk/collections';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
-import { debounceTime, takeUntil } from 'rxjs/operators';
+import { takeUntil } from 'rxjs/operators';
 import { Comment } from '../models/comment.model';
 import { MockCommentService } from './mock-comment.service';
 
 const LOOKAHEAD_BUFFER = 15;
-// How many items to keep active in the sparse array on each side of the viewport
 const MEMORY_WINDOW_HALF = 30;
 
-export class CommentDataSource extends DataSource<Comment | null> {
+export class CommentDataProvider {
   private readonly _data$ = new BehaviorSubject<(Comment | null)[]>([]);
-  private readonly _loading$ = new BehaviorSubject<boolean>(false);
+  private readonly _loading$ = new Subject<boolean>();
   private readonly _inMemoryCount$ = new BehaviorSubject<number>(0);
   private readonly _destroy$ = new Subject<void>();
 
-  // Permanent cache keyed by page number — items are never truly thrown away.
-  // Eviction only nulls the slot in _data$; restoration reads from here.
+  private _isLoading = false;
   private readonly _pageCache = new Map<number, Comment[]>();
   private _nextPage = 0;
   private _hasMore = true;
 
-  readonly data$ = this._data$.asObservable();
-  readonly loading$ = this._loading$.asObservable();
-  readonly inMemoryCount$ = this._inMemoryCount$.asObservable();
+  readonly comments$: Observable<(Comment | null)[]> = this._data$.asObservable();
+  readonly loading$: Observable<boolean> = this._loading$.asObservable();
+  readonly inMemoryCount$: Observable<number> = this._inMemoryCount$.asObservable();
 
   get totalFetched(): number {
     return this._data$.value.length;
   }
 
   constructor(private readonly service: MockCommentService) {
-    super();
-  }
-
-  connect(collectionViewer: CollectionViewer): Observable<(Comment | null)[]> {
     this._fetchNextPage();
-
-    collectionViewer.viewChange
-      .pipe(debounceTime(100), takeUntil(this._destroy$))
-      .subscribe((range: ListRange) => {
-        if (range.end >= this._data$.value.length - LOOKAHEAD_BUFFER) {
-          this._fetchNextPage();
-        }
-      });
-
-    return this._data$.asObservable();
   }
 
-  disconnect(): void {
+  /**
+   * Called by the component on each scroll event with the first and last
+   * visible indices. Handles both memory eviction/restoration and
+   * triggering the next page load when approaching the end.
+   */
+  onScrolled(firstVisible: number, lastVisible: number): void {
+    this._evictAndRestore(firstVisible);
+    if (lastVisible >= this._data$.value.length - LOOKAHEAD_BUFFER) {
+      this._fetchNextPage();
+    }
+  }
+
+  destroy(): void {
     this._destroy$.next();
     this._destroy$.complete();
     this._data$.complete();
@@ -54,12 +49,7 @@ export class CommentDataSource extends DataSource<Comment | null> {
     this._inMemoryCount$.complete();
   }
 
-  /**
-   * Called on every scroll event.
-   * - Evicts slots outside [firstVisible ± MEMORY_WINDOW_HALF] → null
-   * - Restores null slots inside the window from the page cache → Comment
-   */
-  updateScrollIndex(firstVisible: number): void {
+  private _evictAndRestore(firstVisible: number): void {
     const data = this._data$.value;
     const pageSize = this.service.pageSize;
     const windowStart = Math.max(0, firstVisible - MEMORY_WINDOW_HALF);
@@ -67,7 +57,6 @@ export class CommentDataSource extends DataSource<Comment | null> {
 
     let changed = false;
 
-    // Evict items that scrolled out of the window
     for (let i = 0; i < data.length; i++) {
       if (data[i] !== null && (i < windowStart || i > windowEnd)) {
         data[i] = null;
@@ -75,7 +64,6 @@ export class CommentDataSource extends DataSource<Comment | null> {
       }
     }
 
-    // Restore null slots that are now inside the window using the page cache
     const startPage = Math.floor(windowStart / pageSize);
     const endPage = Math.floor(windowEnd / pageSize);
 
@@ -100,8 +88,9 @@ export class CommentDataSource extends DataSource<Comment | null> {
   }
 
   private _fetchNextPage(): void {
-    if (this._loading$.value || !this._hasMore) return;
+    if (this._isLoading || !this._hasMore) return;
 
+    this._isLoading = true;
     this._loading$.next(true);
     const page = this._nextPage;
 
@@ -116,9 +105,11 @@ export class CommentDataSource extends DataSource<Comment | null> {
           this._inMemoryCount$.next(updated.filter(Boolean).length);
           this._hasMore = response.hasMore;
           this._nextPage++;
+          this._isLoading = false;
           this._loading$.next(false);
         },
         error: () => {
+          this._isLoading = false;
           this._loading$.next(false);
         },
       });

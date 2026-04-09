@@ -3,16 +3,17 @@ import {
   OnInit,
   OnDestroy,
   ViewChildren,
+  ViewChild,
   QueryList,
   AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
 } from '@angular/core';
 import { AsyncPipe } from '@angular/common';
-import { ScrollingModule } from '@angular/cdk/scrolling';
+import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
 
-import { CommentDataSource } from './services/comment-data-source';
+import { CommentDataProvider } from './services/comment-data-provider';
 import { MockCommentService } from './services/mock-comment.service';
 import { CommentCardComponent } from './components/comment-card/comment-card.component';
 import { ScrollStatsComponent } from './components/scroll-stats/scroll-stats.component';
@@ -26,9 +27,10 @@ import { ScrollStatsComponent } from './components/scroll-stats/scroll-stats.com
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild(CdkVirtualScrollViewport) viewport!: CdkVirtualScrollViewport;
   @ViewChildren(CommentCardComponent) cardComponents!: QueryList<CommentCardComponent>;
 
-  dataSource!: CommentDataSource;
+  provider!: CommentDataProvider;
   totalFetched = 0;
   totalInMemory = 0;
   totalInDom = 0;
@@ -43,24 +45,24 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.dataSource = new CommentDataSource(this.mockService);
+    this.provider = new CommentDataProvider(this.mockService);
 
     this.subs.add(
-      this.dataSource.data$.subscribe((data) => {
+      this.provider.comments$.subscribe((data) => {
         this.totalFetched = data.length;
         this.cdr.markForCheck();
       })
     );
 
     this.subs.add(
-      this.dataSource.inMemoryCount$.subscribe((count) => {
+      this.provider.inMemoryCount$.subscribe((count) => {
         this.totalInMemory = count;
         this.cdr.markForCheck();
       })
     );
 
     this.subs.add(
-      this.dataSource.loading$.subscribe((loading) => {
+      this.provider.loading$.subscribe((loading) => {
         this.isLoading = loading;
         this.cdr.markForCheck();
       })
@@ -78,7 +80,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onScrolledIndexChange(index: number): void {
     this.firstVisibleIndex = index;
-    this.dataSource.updateScrollIndex(index);
+    const lastVisible = this.viewport.getRenderedRange().end;
+    this.provider.onScrolled(index, lastVisible);
     this.cdr.markForCheck();
   }
 
@@ -91,7 +94,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
-    this.dataSource.disconnect();
+    this.provider.destroy();
   }
-
 }
