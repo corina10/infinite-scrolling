@@ -1,0 +1,71 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:host {
+  display: block;
+  min-height: 100vh;
+  background: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px;
+
+  &__header {
+    margin-bottom: 20px;
+  }
+
+  &__title {
+    margin: 0 0 6px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  &__subtitle {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+  }
+}
+
+.viewer {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+.viewport {
+  height: 600px;
+  background: #f8fafc;
+
+  /* Needed so CDK can measure and position items absolutely */
+  contain: strict;
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  padding: 12px;
+  background: #fff;
+  color: #64748b;
+  font-size: 13px;
+
+  &__spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #e2e8f0;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

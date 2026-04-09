@@ -1,0 +1,60 @@
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 10px 16px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  border-radius: 8px 8px 0 0;
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 16px;
+  }
+
+  &__label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+  }
+
+  &__value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f1f5f9;
+
+    &--memory {
+      color: #fb923c;
+    }
+
+    &--dom {
+      color: #38bdf8;
+    }
+  }
+
+  &__divider {
+    width: 1px;
+    height: 32px;
+    background: #334155;
+  }
+
+  &__badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #166534;
+    color: #bbf7d0;
+
+    &--loading {
+      background: #92400e;
+      color: #fde68a;
+    }
+  }
+}

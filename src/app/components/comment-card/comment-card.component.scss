@@ -1,0 +1,81 @@
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.comment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  margin: 4px 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  &--skeleton {
+    gap: 10px;
+  }
+
+  &__header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  &__id {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__body {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #475569;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+.skeleton {
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+
+  &--id {
+    height: 10px;
+    width: 40px;
+  }
+
+  &--title {
+    height: 14px;
+    width: 60%;
+  }
+
+  &--body {
+    height: 12px;
+    width: 100%;
+  }
+
+  &--body-short {
+    width: 45%;
+  }
+}

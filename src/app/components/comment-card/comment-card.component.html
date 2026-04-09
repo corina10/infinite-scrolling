@@ -1,0 +1,16 @@
+@if (comment) {
+  <article class="comment-card">
+    <header class="comment-card__header">
+      <span class="comment-card__id">#{{ comment.id }}</span>
+      <h3 class="comment-card__title">{{ comment.title }}</h3>
+    </header>
+    <p class="comment-card__body">{{ comment.body }}</p>
+  </article>
+} @else {
+  <div class="comment-card comment-card--skeleton">
+    <div class="skeleton skeleton--id"></div>
+    <div class="skeleton skeleton--title"></div>
+    <div class="skeleton skeleton--body"></div>
+    <div class="skeleton skeleton--body skeleton--body-short"></div>
+  </div>
+}

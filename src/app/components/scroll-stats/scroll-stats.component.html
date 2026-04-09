@@ -1,0 +1,28 @@
+<div class="stats-bar">
+  <div class="stats-bar__item">
+    <span class="stats-bar__label">Fetched</span>
+    <span class="stats-bar__value">{{ totalFetched }} / {{ totalItems }}</span>
+  </div>
+  <div class="stats-bar__divider"></div>
+  <div class="stats-bar__item">
+    <span class="stats-bar__label">In memory</span>
+    <span class="stats-bar__value stats-bar__value--memory">{{ totalInMemory }}</span>
+  </div>
+  <div class="stats-bar__divider"></div>
+  <div class="stats-bar__item">
+    <span class="stats-bar__label">In DOM</span>
+    <span class="stats-bar__value stats-bar__value--dom">{{ totalInDom }}</span>
+  </div>
+  <div class="stats-bar__divider"></div>
+  <div class="stats-bar__item">
+    <span class="stats-bar__label">First visible</span>
+    <span class="stats-bar__value">#{{ firstVisibleIndex + 1 }}</span>
+  </div>
+  <div class="stats-bar__divider"></div>
+  <div class="stats-bar__item">
+    <span class="stats-bar__label">Status</span>
+    <span class="stats-bar__badge" [class.stats-bar__badge--loading]="isLoading">
+      {{ isLoading ? 'Loading…' : 'Idle' }}
+    </span>
+  </div>
+</div>
