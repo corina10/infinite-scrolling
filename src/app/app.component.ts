@@ -94,7 +94,4 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dataSource.disconnect();
   }
 
-  get totalItems(): number {
-    return this.mockService.totalItems;
-  }
 }

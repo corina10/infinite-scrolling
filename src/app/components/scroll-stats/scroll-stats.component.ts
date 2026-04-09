@@ -13,6 +13,5 @@ export class ScrollStatsComponent {
   @Input() totalInMemory = 0;
   @Input() totalInDom = 0;
   @Input() firstVisibleIndex = 0;
-  @Input() totalItems = 0;
   @Input() isLoading = false;
 }

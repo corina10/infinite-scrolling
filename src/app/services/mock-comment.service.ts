@@ -3,7 +3,6 @@ import { Observable, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 import { Comment } from '../models/comment.model';
 
-const TOTAL_ITEMS = 500;
 const PAGE_SIZE = 20;
 const NETWORK_DELAY_MS = 400;
 
@@ -30,8 +29,7 @@ function generateBody(id: number): string {
 
 function generatePage(page: number): Comment[] {
   const start = page * PAGE_SIZE;
-  const end = Math.min(start + PAGE_SIZE, TOTAL_ITEMS);
-  return Array.from({ length: end - start }, (_, i) => {
+  return Array.from({ length: PAGE_SIZE }, (_, i) => {
     const id = start + i + 1;
     return {
       id,
@@ -43,22 +41,17 @@ function generatePage(page: number): Comment[] {
 
 export interface PageResponse {
   items: Comment[];
-  totalItems: number;
   hasMore: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
 export class MockCommentService {
   readonly pageSize = PAGE_SIZE;
-  readonly totalItems = TOTAL_ITEMS;
 
   getPage(page: number): Observable<PageResponse> {
-    const items = generatePage(page);
-    const loadedSoFar = page * PAGE_SIZE + items.length;
     return of({
-      items,
-      totalItems: TOTAL_ITEMS,
-      hasMore: loadedSoFar < TOTAL_ITEMS,
+      items: generatePage(page),
+      hasMore: true,
     }).pipe(delay(NETWORK_DELAY_MS));
   }
 }
