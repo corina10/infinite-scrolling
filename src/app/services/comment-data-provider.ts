@@ -1,4 +1,4 @@
-import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Comment } from '../models/comment.model';
 import { MockCommentService } from './mock-comment.service';
@@ -7,9 +7,18 @@ const LOOKAHEAD_BUFFER = 15;
 const MEMORY_WINDOW_HALF = 30;
 
 export class CommentDataProvider {
-  private readonly _data$ = new BehaviorSubject<(Comment | null)[]>([]);
+  // WS messages prepended at the top — kept fully in memory, never evicted.
+  private _newItems: Comment[] = [];
+
+  // Paged data from the backend. Items outside the scroll window are replaced
+  // with null and restored from _pageCache when scrolled back into view.
+  private _pagedData: (Comment | null)[] = [];
+
+  private _inMemoryCount = 0;
+
+  private readonly _data$ = new Subject<(Comment | null)[]>();
   private readonly _loading$ = new Subject<boolean>();
-  private readonly _inMemoryCount$ = new BehaviorSubject<number>(0);
+  private readonly _inMemoryCount$ = new Subject<number>();
   private readonly _destroy$ = new Subject<void>();
 
   private _isLoading = false;
@@ -22,21 +31,28 @@ export class CommentDataProvider {
   readonly inMemoryCount$: Observable<number> = this._inMemoryCount$.asObservable();
 
   get totalFetched(): number {
-    return this._data$.value.length;
+    return this._newItems.length + this._pagedData.length;
   }
 
   constructor(private readonly service: MockCommentService) {
     this._fetchNextPage();
   }
 
-  /**
-   * Called by the component on each scroll event with the first and last
-   * visible indices. Handles both memory eviction/restoration and
-   * triggering the next page load when approaching the end.
-   */
+  prependMessage(comment: Comment): void {
+    this._newItems = [comment, ...this._newItems];
+    this._emitData();
+  }
+
   onScrolled(firstVisible: number, lastVisible: number): void {
-    this._evictAndRestore(firstVisible);
-    if (lastVisible >= this._data$.value.length - LOOKAHEAD_BUFFER) {
+    // Translate absolute indices into _pagedData-relative indices by subtracting
+    // the number of WS items sitting above the paged section.
+    const offset = this._newItems.length;
+    const pagedFirst = Math.max(0, firstVisible - offset);
+    const pagedLast = lastVisible - offset;
+
+    this._evictAndRestore(pagedFirst);
+
+    if (pagedLast >= this._pagedData.length - LOOKAHEAD_BUFFER) {
       this._fetchNextPage();
     }
   }
@@ -50,16 +66,15 @@ export class CommentDataProvider {
   }
 
   private _evictAndRestore(firstVisible: number): void {
-    const data = this._data$.value;
     const pageSize = this.service.pageSize;
     const windowStart = Math.max(0, firstVisible - MEMORY_WINDOW_HALF);
-    const windowEnd = Math.min(data.length - 1, firstVisible + MEMORY_WINDOW_HALF);
+    const windowEnd = Math.min(this._pagedData.length - 1, firstVisible + MEMORY_WINDOW_HALF);
 
     let changed = false;
 
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] !== null && (i < windowStart || i > windowEnd)) {
-        data[i] = null;
+    for (let i = 0; i < this._pagedData.length; i++) {
+      if (this._pagedData[i] !== null && (i < windowStart || i > windowEnd)) {
+        this._pagedData[i] = null;
         changed = true;
       }
     }
@@ -74,16 +89,15 @@ export class CommentDataProvider {
       const pageStart = page * pageSize;
       for (let i = 0; i < cached.length; i++) {
         const idx = pageStart + i;
-        if (idx >= windowStart && idx <= windowEnd && idx < data.length && data[idx] === null) {
-          data[idx] = cached[i];
+        if (idx >= windowStart && idx <= windowEnd && idx < this._pagedData.length && this._pagedData[idx] === null) {
+          this._pagedData[idx] = cached[i];
           changed = true;
         }
       }
     }
 
     if (changed) {
-      this._data$.next([...data]);
-      this._inMemoryCount$.next(data.filter(Boolean).length);
+      this._emitData();
     }
   }
 
@@ -100,18 +114,24 @@ export class CommentDataProvider {
       .subscribe({
         next: (response) => {
           this._pageCache.set(page, response.items);
-          const updated = [...this._data$.value, ...response.items];
-          this._data$.next(updated);
-          this._inMemoryCount$.next(updated.filter(Boolean).length);
+          this._pagedData = [...this._pagedData, ...response.items];
           this._hasMore = response.hasMore;
           this._nextPage++;
           this._isLoading = false;
           this._loading$.next(false);
+          this._emitData();
         },
         error: () => {
           this._isLoading = false;
           this._loading$.next(false);
         },
       });
+  }
+
+  private _emitData(): void {
+    const combined = [...this._newItems, ...this._pagedData];
+    this._inMemoryCount = combined.filter(Boolean).length;
+    this._data$.next(combined);
+    this._inMemoryCount$.next(this._inMemoryCount);
   }
 }

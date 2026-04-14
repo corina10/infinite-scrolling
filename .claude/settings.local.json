@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(rm src/app/services/comment-data-source.ts)",
-      "Bash(npx ng:*)"
+      "Bash(npx ng:*)",
+      "Bash(grep -E \"\\\\.\\(ts|html|json\\)$\")"
     ]
   }
 }

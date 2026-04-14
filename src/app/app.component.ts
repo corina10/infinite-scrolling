@@ -15,6 +15,7 @@ import { Subscription } from 'rxjs';
 
 import { CommentDataProvider } from './services/comment-data-provider';
 import { MockCommentService } from './services/mock-comment.service';
+import { MockWebSocketService } from './services/mock-websocket.service';
 import { CommentCardComponent } from './components/comment-card/comment-card.component';
 import { ScrollStatsComponent } from './components/scroll-stats/scroll-stats.component';
 
@@ -41,6 +42,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private readonly mockService: MockCommentService,
+    private readonly wsService: MockWebSocketService,
     private readonly cdr: ChangeDetectorRef
   ) {}
 
@@ -50,6 +52,19 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
     this.subs.add(
       this.provider.comments$.subscribe((data) => {
         this.totalFetched = data.length;
+        this.cdr.markForCheck();
+      })
+    );
+
+    this.subs.add(
+      this.wsService.messages$.subscribe((comment) => {
+        const offsetBefore = this.viewport?.measureScrollOffset() ?? 0;
+        this.provider.prependMessage(comment);
+        // If the user has scrolled down at all, shift the scroll position by
+        // one item height so the new top item doesn't push content down.
+        if (offsetBefore > 0) {
+          this.viewport.scrollToOffset(offsetBefore + 120);
+        }
         this.cdr.markForCheck();
       })
     );
