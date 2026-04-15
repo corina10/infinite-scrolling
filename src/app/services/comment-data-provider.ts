@@ -84,6 +84,12 @@ export class CommentDataProvider {
     const startPage = Math.floor(windowStart / pageSize);
     const endPage = Math.floor(windowEnd / pageSize);
 
+    for (const page of this._pageCache.keys()) {
+      if (page < startPage || page > endPage) {
+        this._pageCache.delete(page);
+      }
+    }
+
     for (let page = startPage; page <= endPage; page++) {
       const cached = this._pageCache.get(page);
       if (!cached) continue;
