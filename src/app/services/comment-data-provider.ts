@@ -139,9 +139,37 @@ export class CommentDataProvider {
   }
 
   private _emitData(): void {
-    const paged = Array.from({ length: this._totalPagedCount }, (_, i) => this._pagedData.get(i) ?? null);
-    const combined = [...this._newItems, ...paged];
-    this._inMemoryCount = this._newItems.length + this._pagedData.size;
+    const newItems = this._newItems;
+    const pagedData = this._pagedData;
+    const newCount = newItems.length;
+    const totalLength = newCount + this._totalPagedCount;
+
+    // Proxy avoids allocating a dense array of totalLength slots. CDK virtual
+    // scroll only needs `length` (for scroll-height) and `slice(start, end)`
+    // (for the visible range), so those are the only members we implement.
+    const combined = new Proxy([] as (Comment | null)[], {
+      get(target, prop, receiver) {
+        if (prop === 'length') return totalLength;
+        if (prop === 'slice') {
+          return (start = 0, end = totalLength) => {
+            const s = Math.min(Math.max(start < 0 ? totalLength + start : start, 0), totalLength);
+            const e = Math.min(Math.max(end < 0 ? totalLength + end : end, 0), totalLength);
+            const result: (Comment | null)[] = [];
+            for (let i = s; i < e; i++) {
+              result.push(i < newCount ? newItems[i] : (pagedData.get(i - newCount) ?? null));
+            }
+            return result;
+          };
+        }
+        const i = Number(prop);
+        if (Number.isInteger(i) && i >= 0 && i < totalLength) {
+          return i < newCount ? newItems[i] : (pagedData.get(i - newCount) ?? null);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    this._inMemoryCount = newCount + this._pagedData.size;
     this._data$.next(combined);
     this._inMemoryCount$.next(this._inMemoryCount);
   }
