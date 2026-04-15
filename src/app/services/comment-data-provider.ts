@@ -25,8 +25,13 @@ export class CommentDataProvider {
 
   private _isLoading = false;
   private readonly _pageCache = new Map<number, Comment[]>();
+  private readonly _pendingPages = new Set<number>();
   private _nextPage = 0;
   private _hasMore = true;
+
+  // Current window bounds, kept up-to-date so async re-fetches know where to restore.
+  private _windowStart = 0;
+  private _windowEnd = 0;
 
   readonly comments$: Observable<(Comment | null)[]> = this._data$.asObservable();
   readonly loading$: Observable<boolean> = this._loading$.asObservable();
@@ -72,6 +77,9 @@ export class CommentDataProvider {
     const windowStart = Math.max(0, firstVisible - MEMORY_WINDOW_HALF);
     const windowEnd = Math.min(this._totalPagedCount - 1, firstVisible + MEMORY_WINDOW_HALF);
 
+    this._windowStart = windowStart;
+    this._windowEnd = windowEnd;
+
     let changed = false;
 
     for (const i of this._pagedData.keys()) {
@@ -92,7 +100,10 @@ export class CommentDataProvider {
 
     for (let page = startPage; page <= endPage; page++) {
       const cached = this._pageCache.get(page);
-      if (!cached) continue;
+      if (!cached) {
+        this._refetchPage(page);
+        continue;
+      }
 
       const pageStart = page * pageSize;
       for (let i = 0; i < cached.length; i++) {
@@ -107,6 +118,33 @@ export class CommentDataProvider {
     if (changed) {
       this._emitData();
     }
+  }
+
+  private _refetchPage(page: number): void {
+    if (this._pendingPages.has(page)) return;
+    this._pendingPages.add(page);
+
+    this.service
+      .getPage(page)
+      .pipe(takeUntil(this._destroy$))
+      .subscribe({
+        next: (response) => {
+          this._pendingPages.delete(page);
+          this._pageCache.set(page, response.items);
+
+          const pageStart = page * this.service.pageSize;
+          let changed = false;
+          for (let i = 0; i < response.items.length; i++) {
+            const idx = pageStart + i;
+            if (idx >= this._windowStart && idx <= this._windowEnd && !this._pagedData.has(idx)) {
+              this._pagedData.set(idx, response.items[i]);
+              changed = true;
+            }
+          }
+          if (changed) this._emitData();
+        },
+        error: () => this._pendingPages.delete(page),
+      });
   }
 
   private _fetchNextPage(): void {
