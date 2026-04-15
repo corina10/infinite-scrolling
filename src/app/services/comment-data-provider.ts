@@ -10,9 +10,11 @@ export class CommentDataProvider {
   // WS messages prepended at the top — kept fully in memory, never evicted.
   private _newItems: Comment[] = [];
 
-  // Paged data from the backend. Items outside the scroll window are replaced
-  // with null and restored from _pageCache when scrolled back into view.
-  private _pagedData: (Comment | null)[] = [];
+  // Sparse map of index → Comment for paged data. Only the scroll window is
+  // retained in memory; items outside it are deleted and restored from
+  // _pageCache when scrolled back into view.
+  private _pagedData = new Map<number, Comment>();
+  private _totalPagedCount = 0;
 
   private _inMemoryCount = 0;
 
@@ -31,7 +33,7 @@ export class CommentDataProvider {
   readonly inMemoryCount$: Observable<number> = this._inMemoryCount$.asObservable();
 
   get totalFetched(): number {
-    return this._newItems.length + this._pagedData.length;
+    return this._newItems.length + this._totalPagedCount;
   }
 
   constructor(private readonly service: MockCommentService) {
@@ -52,7 +54,7 @@ export class CommentDataProvider {
 
     this._evictAndRestore(pagedFirst);
 
-    if (pagedLast >= this._pagedData.length - LOOKAHEAD_BUFFER) {
+    if (pagedLast >= this._totalPagedCount - LOOKAHEAD_BUFFER) {
       this._fetchNextPage();
     }
   }
@@ -68,13 +70,13 @@ export class CommentDataProvider {
   private _evictAndRestore(firstVisible: number): void {
     const pageSize = this.service.pageSize;
     const windowStart = Math.max(0, firstVisible - MEMORY_WINDOW_HALF);
-    const windowEnd = Math.min(this._pagedData.length - 1, firstVisible + MEMORY_WINDOW_HALF);
+    const windowEnd = Math.min(this._totalPagedCount - 1, firstVisible + MEMORY_WINDOW_HALF);
 
     let changed = false;
 
-    for (let i = 0; i < this._pagedData.length; i++) {
-      if (this._pagedData[i] !== null && (i < windowStart || i > windowEnd)) {
-        this._pagedData[i] = null;
+    for (const i of this._pagedData.keys()) {
+      if (i < windowStart || i > windowEnd) {
+        this._pagedData.delete(i);
         changed = true;
       }
     }
@@ -89,8 +91,8 @@ export class CommentDataProvider {
       const pageStart = page * pageSize;
       for (let i = 0; i < cached.length; i++) {
         const idx = pageStart + i;
-        if (idx >= windowStart && idx <= windowEnd && idx < this._pagedData.length && this._pagedData[idx] === null) {
-          this._pagedData[idx] = cached[i];
+        if (idx >= windowStart && idx <= windowEnd && idx < this._totalPagedCount && !this._pagedData.has(idx)) {
+          this._pagedData.set(idx, cached[i]);
           changed = true;
         }
       }
@@ -114,7 +116,9 @@ export class CommentDataProvider {
       .subscribe({
         next: (response) => {
           this._pageCache.set(page, response.items);
-          this._pagedData = [...this._pagedData, ...response.items];
+          const offset = this._totalPagedCount;
+          response.items.forEach((item, i) => this._pagedData.set(offset + i, item));
+          this._totalPagedCount += response.items.length;
           this._hasMore = response.hasMore;
           this._nextPage++;
           this._isLoading = false;
@@ -129,8 +133,9 @@ export class CommentDataProvider {
   }
 
   private _emitData(): void {
-    const combined = [...this._newItems, ...this._pagedData];
-    this._inMemoryCount = combined.filter(Boolean).length;
+    const paged = Array.from({ length: this._totalPagedCount }, (_, i) => this._pagedData.get(i) ?? null);
+    const combined = [...this._newItems, ...paged];
+    this._inMemoryCount = this._newItems.length + this._pagedData.size;
     this._data$.next(combined);
     this._inMemoryCount$.next(this._inMemoryCount);
   }
