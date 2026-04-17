@@ -1,11 +1,13 @@
+import { Injectable, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { Comment } from '../models/comment.model';
 import { MockCommentService } from './mock-comment.service';
 
 const LOOKAHEAD_BUFFER = 15;
 const MEMORY_WINDOW_HALF = 30;
 
+@Injectable({ providedIn: 'root' })
 export class CommentDataProvider {
   // WS messages prepended at the top — kept fully in memory, never evicted.
   private _newItems: Comment[] = [];
@@ -21,7 +23,6 @@ export class CommentDataProvider {
   private readonly _data$ = new Subject<(Comment | null)[]>();
   private readonly _loading$ = new Subject<boolean>();
   private readonly _inMemoryCount$ = new Subject<number>();
-  private readonly _destroy$ = new Subject<void>();
 
   private _isLoading = false;
   private readonly _pageCache = new Map<number, Comment[]>();
@@ -41,7 +42,15 @@ export class CommentDataProvider {
     return this._newItems.length + this._totalPagedCount;
   }
 
-  constructor(private readonly service: MockCommentService) {
+  constructor(
+    private readonly service: MockCommentService,
+    private readonly destroyRef: DestroyRef,
+  ) {
+    this.destroyRef.onDestroy(() => {
+      this._data$.complete();
+      this._loading$.complete();
+      this._inMemoryCount$.complete();
+    });
     this._fetchNextPage();
   }
 
@@ -64,13 +73,6 @@ export class CommentDataProvider {
     }
   }
 
-  destroy(): void {
-    this._destroy$.next();
-    this._destroy$.complete();
-    this._data$.complete();
-    this._loading$.complete();
-    this._inMemoryCount$.complete();
-  }
 
   private _evictAndRestore(firstVisible: number): void {
     const pageSize = this.service.pageSize;
@@ -126,7 +128,7 @@ export class CommentDataProvider {
 
     this.service
       .getPage(page)
-      .pipe(takeUntil(this._destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
           this._pendingPages.delete(page);
@@ -156,7 +158,7 @@ export class CommentDataProvider {
 
     this.service
       .getPage(page)
-      .pipe(takeUntil(this._destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
           this._pageCache.set(page, response.items);

@@ -14,7 +14,6 @@ import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrollin
 import { Subscription } from 'rxjs';
 
 import { CommentDataProvider } from './services/comment-data-provider';
-import { MockCommentService } from './services/mock-comment.service';
 import { MockWebSocketService } from './services/mock-websocket.service';
 import { CommentCardComponent } from './components/comment-card/comment-card.component';
 import { ScrollStatsComponent } from './components/scroll-stats/scroll-stats.component';
@@ -31,7 +30,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild(CdkVirtualScrollViewport) viewport!: CdkVirtualScrollViewport;
   @ViewChildren(CommentCardComponent) cardComponents!: QueryList<CommentCardComponent>;
 
-  provider!: CommentDataProvider;
   totalFetched = 0;
   totalInMemory = 0;
   totalInDom = 0;
@@ -41,14 +39,12 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly subs = new Subscription();
 
   constructor(
-    private readonly mockService: MockCommentService,
+    readonly provider: CommentDataProvider,
     private readonly wsService: MockWebSocketService,
     private readonly cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
-    this.provider = new CommentDataProvider(this.mockService);
-
     this.subs.add(
       this.provider.comments$.subscribe((data) => {
         this.totalFetched = data.length;
@@ -109,6 +105,5 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
-    this.provider.destroy();
   }
 }
