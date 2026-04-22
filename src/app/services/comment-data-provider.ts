@@ -16,9 +16,11 @@ export class CommentDataProvider {
   // retained in memory; items outside it are deleted and restored from
   // _pageCache when scrolled back into view.
   private _pagedData = new Map<number, Comment>();
-  private _totalPagedCount = 0;
 
   private _inMemoryCount = 0;
+
+  // Paged-item count derived from the service total so we don't track it twice.
+  private get _pagedCount(): number { return this.service.total - this._newItems.length; }
 
   private readonly _data$ = new Subject<(Comment | null)[]>();
   private readonly _loading$ = new Subject<boolean>();
@@ -39,7 +41,7 @@ export class CommentDataProvider {
   readonly inMemoryCount$: Observable<number> = this._inMemoryCount$.asObservable();
 
   get totalFetched(): number {
-    return this._newItems.length + this._totalPagedCount;
+    return this.service.total;
   }
 
   constructor(
@@ -56,6 +58,7 @@ export class CommentDataProvider {
 
   prependMessage(comment: Comment): void {
     this._newItems = [comment, ...this._newItems];
+    this.service.addItems(1);
     this._emitData();
   }
 
@@ -68,7 +71,7 @@ export class CommentDataProvider {
 
     this._evictAndRestore(pagedFirst);
 
-    if (pagedLast >= this._totalPagedCount - LOOKAHEAD_BUFFER) {
+    if (pagedLast >= this._pagedCount - LOOKAHEAD_BUFFER) {
       this._fetchNextPage();
     }
   }
@@ -77,7 +80,7 @@ export class CommentDataProvider {
   private _evictAndRestore(firstVisible: number): void {
     const pageSize = this.service.pageSize;
     const windowStart = Math.max(0, firstVisible - MEMORY_WINDOW_HALF);
-    const windowEnd = Math.min(this._totalPagedCount - 1, firstVisible + MEMORY_WINDOW_HALF);
+    const windowEnd = Math.min(this._pagedCount - 1, firstVisible + MEMORY_WINDOW_HALF);
 
     this._windowStart = windowStart;
     this._windowEnd = windowEnd;
@@ -110,7 +113,7 @@ export class CommentDataProvider {
       const pageStart = page * pageSize;
       for (let i = 0; i < cached.length; i++) {
         const idx = pageStart + i;
-        if (idx >= windowStart && idx <= windowEnd && idx < this._totalPagedCount && !this._pagedData.has(idx)) {
+        if (idx >= windowStart && idx <= windowEnd && idx < this._pagedCount && !this._pagedData.has(idx)) {
           this._pagedData.set(idx, cached[i]);
           changed = true;
         }
@@ -162,9 +165,8 @@ export class CommentDataProvider {
       .subscribe({
         next: (response) => {
           this._pageCache.set(page, response.items);
-          const offset = this._totalPagedCount;
+          const offset = page * this.service.pageSize;
           response.items.forEach((item, i) => this._pagedData.set(offset + i, item));
-          this._totalPagedCount += response.items.length;
           this._hasMore = response.hasMore;
           this._nextPage++;
           this._isLoading = false;
@@ -182,7 +184,7 @@ export class CommentDataProvider {
     const newItems = this._newItems;
     const pagedData = this._pagedData;
     const newCount = newItems.length;
-    const totalLength = newCount + this._totalPagedCount;
+    const totalLength = this.service.total;
 
     // Proxy avoids allocating a dense array of totalLength slots. CDK virtual
     // scroll only needs `length` (for scroll-height) and `slice(start, end)`

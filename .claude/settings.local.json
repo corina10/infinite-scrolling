@@ -3,7 +3,8 @@
     "allow": [
       "Bash(rm src/app/services/comment-data-source.ts)",
       "Bash(npx ng:*)",
-      "Bash(grep -E \"\\\\.\\(ts|html|json\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|html|json\\)$\")",
+      "Bash(anthropic login *)"
     ]
   }
 }

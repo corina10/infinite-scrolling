@@ -4,6 +4,7 @@ import { delay } from 'rxjs/operators';
 import { Comment } from '../models/comment.model';
 
 const PAGE_SIZE = 20;
+const TOTAL_ITEMS = 1000;
 const NETWORK_DELAY_MS = 400;
 
 const LOREM_SENTENCES = [
@@ -41,6 +42,7 @@ function generatePage(page: number): Comment[] {
 
 export interface PageResponse {
   items: Comment[];
+  totalCount: number;
   hasMore: boolean;
 }
 
@@ -48,10 +50,17 @@ export interface PageResponse {
 export class MockCommentService {
   readonly pageSize = PAGE_SIZE;
 
+  // Starts at the known total so the scrollbar is correctly sized immediately,
+  // before any pages are fetched. Only live WS updates increment this.
+  private _total = TOTAL_ITEMS;
+  get total(): number { return this._total; }
+  addItems(count: number): void { this._total += count; }
+
   getPage(page: number): Observable<PageResponse> {
     return of({
       items: generatePage(page),
-      hasMore: true,
+      totalCount: TOTAL_ITEMS,
+      hasMore: (page + 1) * PAGE_SIZE < TOTAL_ITEMS,
     }).pipe(delay(NETWORK_DELAY_MS));
   }
 }
