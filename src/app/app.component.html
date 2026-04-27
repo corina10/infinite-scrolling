@@ -10,15 +10,15 @@
     <app-scroll-stats [totalFetched]="totalFetched" [totalInMemory]="totalInMemory" [totalInDom]="totalInDom"
       [firstVisibleIndex]="firstVisibleIndex" [isLoading]="isLoading" />
 
-    <cdk-virtual-scroll-viewport class="viewport" itemSize="120" (scrolledIndexChange)="onScrolledIndexChange($event)">
-      <app-comment-card *cdkVirtualFor="let comment of provider.comments$; trackBy: trackById" [comment]="comment" />
-    </cdk-virtual-scroll-viewport>
-
     @if (isLoading) {
     <div class="loading-row">
       <span class="loading-row__spinner"></span>
-      Loading more comments…
+      Loading older messages…
     </div>
     }
+
+    <cdk-virtual-scroll-viewport class="viewport" autosize minBufferPx="400" maxBufferPx="800">
+      <app-comment-card *cdkVirtualFor="let comment of provider.comments$; trackBy: trackById" [comment]="comment" />
+    </cdk-virtual-scroll-viewport>
   </div>
 </div>

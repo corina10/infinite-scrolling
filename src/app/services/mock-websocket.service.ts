@@ -10,7 +10,11 @@ const WS_INTERVAL_MS = 5000;
 const WS_ID_START = 1_000_000;
 
 const LIVE_BODIES = [
-  'This is a newly added comment'
+  'This is a newly added comment',
+  'A short live update.',
+  'Live messages can be longer too — varying lengths help exercise the autosize virtual scroll strategy and confirm that the spacer adjusts correctly as content arrives.',
+  'Another quick one.',
+  'Mid-length live update with a couple of extra clauses to push the height up a bit, but not too much.',
 ];
 
 @Injectable({ providedIn: 'root' })

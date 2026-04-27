@@ -9,15 +9,18 @@
   gap: 6px;
   padding: 12px 16px;
   margin: 4px 8px;
-  height: 112px; /* 120 itemSize - 8px (4px top + 4px bottom margin) */
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   box-sizing: border-box;
   overflow: hidden;
 
+  /* Skeleton height ≈ average real card height. Keeping a fixed skeleton size
+     avoids layout shifts when an evicted slot swaps to its real content, and
+     keeps the autosize averager stable. */
   &--skeleton {
     gap: 10px;
+    height: 150px;
   }
 
   &__header {
@@ -48,10 +51,7 @@
     font-size: 13px;
     line-height: 1.5;
     color: #475569;
-    display: -webkit-box;
-    -webkit-line-clamp: 5;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    word-wrap: break-word;
   }
 }
 

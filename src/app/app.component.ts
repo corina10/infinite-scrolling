@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { AsyncPipe } from '@angular/common';
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
+import { ScrollingModule as ExperimentalScrollingModule } from '@angular/cdk-experimental/scrolling';
 import { Subscription } from 'rxjs';
 
 import { CommentDataProvider } from './services/comment-data-provider';
@@ -21,7 +22,7 @@ import { ScrollStatsComponent } from './components/scroll-stats/scroll-stats.com
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [ScrollingModule, AsyncPipe, CommentCardComponent, ScrollStatsComponent],
+  imports: [ScrollingModule, ExperimentalScrollingModule, AsyncPipe, CommentCardComponent, ScrollStatsComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,12 +55,16 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.subs.add(
       this.wsService.messages$.subscribe((comment) => {
-        const offsetBefore = this.viewport?.measureScrollOffset() ?? 0;
-        this.provider.prependMessage(comment);
-        // If the user has scrolled down at all, shift the scroll position by
-        // one item height so the new top item doesn't push content down.
-        if (offsetBefore > 0) {
-          this.viewport.scrollToOffset(offsetBefore + 120);
+        // Capture "was near bottom" before appending so the new item's height
+        // doesn't sway the decision.
+        const el = this.viewport?.elementRef.nativeElement as HTMLElement | undefined;
+        const wasNearBottom = !el ||
+          el.scrollHeight - (el.scrollTop + el.clientHeight) < 300;
+
+        this.provider.appendMessage(comment);
+
+        if (wasNearBottom) {
+          setTimeout(() => this.viewport.scrollTo({ bottom: 0 }));
         }
         this.cdr.markForCheck();
       })
@@ -87,13 +92,24 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
         this.cdr.markForCheck();
       })
     );
-  }
 
-  onScrolledIndexChange(index: number): void {
-    this.firstVisibleIndex = index;
-    const lastVisible = this.viewport.getRenderedRange().end;
-    this.provider.onScrolled(index, lastVisible);
-    this.cdr.markForCheck();
+    // The autosize strategy doesn't support scrolledIndexChange, so derive the
+    // current first-visible index from the rendered range stream instead.
+    this.subs.add(
+      this.viewport.renderedRangeStream.subscribe((range) => {
+        this.firstVisibleIndex = range.start;
+        this.provider.onScrolled(range.start, range.end);
+        this.cdr.markForCheck();
+      })
+    );
+
+    // Scroll to bottom once the first page of data is available.
+    const scrollSub = this.provider.comments$.subscribe((data) => {
+      if (data.length > 0) {
+        scrollSub.unsubscribe();
+        setTimeout(() => this.viewport.scrollTo({ bottom: 0 }));
+      }
+    });
   }
 
   trackById(index: number, comment: { id: number } | null): number {

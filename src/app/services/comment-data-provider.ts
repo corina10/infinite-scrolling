@@ -5,21 +5,20 @@ import { Comment } from '../models/comment.model';
 import { MockCommentService } from './mock-comment.service';
 
 const LOOKAHEAD_BUFFER = 15;
-const MEMORY_WINDOW_HALF = 30;
+const MEMORY_WINDOW_HALF = 60;
 
 @Injectable({ providedIn: 'root' })
 export class CommentDataProvider {
-  // WS messages prepended at the top — kept fully in memory, never evicted.
+  // WS messages appended at the bottom — kept fully in memory, never evicted.
   private _newItems: Comment[] = [];
 
-  // Sparse map of index → Comment for paged data. Only the scroll window is
-  // retained in memory; items outside it are deleted and restored from
-  // _pageCache when scrolled back into view.
+  // Sparse map of index → Comment for paged data. Index 0 = oldest item.
+  // Only the scroll window is retained; items outside it are evicted and
+  // restored from _pageCache when scrolled back into view.
   private _pagedData = new Map<number, Comment>();
 
   private _inMemoryCount = 0;
 
-  // Paged-item count derived from the service total so we don't track it twice.
   private get _pagedCount(): number { return this.service.total - this._newItems.length; }
 
   private readonly _data$ = new Subject<(Comment | null)[]>();
@@ -29,10 +28,12 @@ export class CommentDataProvider {
   private _isLoading = false;
   private readonly _pageCache = new Map<number, Comment[]>();
   private readonly _pendingPages = new Set<number>();
-  private _nextPage = 0;
-  private _hasMore = true;
 
-  // Current window bounds, kept up-to-date so async re-fetches know where to restore.
+  // Pages are fetched newest-first. _nextOlderPage tracks which page to fetch
+  // next as the user scrolls up toward older history; -1 means fully loaded.
+  private _nextOlderPage: number;
+
+  // Current window bounds kept up-to-date so async re-fetches know where to restore.
   private _windowStart = 0;
   private _windowEnd = 0;
 
@@ -53,29 +54,35 @@ export class CommentDataProvider {
       this._loading$.complete();
       this._inMemoryCount$.complete();
     });
-    this._fetchNextPage();
+    const totalPages = Math.ceil(this.service.total / this.service.pageSize);
+    this._nextOlderPage = totalPages - 1;
+    this._fetchOlderPage();
   }
 
-  prependMessage(comment: Comment): void {
-    this._newItems = [comment, ...this._newItems];
+  // Appends a WS message at the bottom of the chat.
+  appendMessage(comment: Comment): void {
+    this._newItems = [...this._newItems, comment];
     this.service.addItems(1);
     this._emitData();
   }
 
-  onScrolled(firstVisible: number, lastVisible: number): void {
-    // Translate absolute indices into _pagedData-relative indices by subtracting
-    // the number of WS items sitting above the paged section.
-    const offset = this._newItems.length;
-    const pagedFirst = Math.max(0, firstVisible - offset);
-    const pagedLast = lastVisible - offset;
+  onScrolled(firstVisible: number, _lastVisible: number): void {
+    // Paged items occupy indices 0.._pagedCount-1; WS items follow after.
+    // Eviction only applies to the paged section.
+    const pagedFirst = Math.min(firstVisible, this._pagedCount - 1);
 
     this._evictAndRestore(pagedFirst);
 
-    if (pagedLast >= this._pagedCount - LOOKAHEAD_BUFFER) {
-      this._fetchNextPage();
+    // Fetch older pages as user scrolls toward the top (index 0 = oldest).
+    // earliestLoadedIndex is the first index of the oldest page already fetched;
+    // trigger when the user gets within LOOKAHEAD_BUFFER of it.
+    if (this._nextOlderPage >= 0) {
+      const earliestLoadedIndex = (this._nextOlderPage + 1) * this.service.pageSize;
+      if (pagedFirst <= earliestLoadedIndex + LOOKAHEAD_BUFFER) {
+        this._fetchOlderPage();
+      }
     }
   }
-
 
   private _evictAndRestore(firstVisible: number): void {
     const pageSize = this.service.pageSize;
@@ -152,12 +159,12 @@ export class CommentDataProvider {
       });
   }
 
-  private _fetchNextPage(): void {
-    if (this._isLoading || !this._hasMore) return;
+  private _fetchOlderPage(): void {
+    if (this._isLoading || this._nextOlderPage < 0) return;
 
     this._isLoading = true;
     this._loading$.next(true);
-    const page = this._nextPage;
+    const page = this._nextOlderPage;
 
     this.service
       .getPage(page)
@@ -165,10 +172,9 @@ export class CommentDataProvider {
       .subscribe({
         next: (response) => {
           this._pageCache.set(page, response.items);
-          const offset = page * this.service.pageSize;
-          response.items.forEach((item, i) => this._pagedData.set(offset + i, item));
-          this._hasMore = response.hasMore;
-          this._nextPage++;
+          const pageStart = page * this.service.pageSize;
+          response.items.forEach((item, i) => this._pagedData.set(pageStart + i, item));
+          this._nextOlderPage--;
           this._isLoading = false;
           this._loading$.next(false);
           this._emitData();
@@ -181,37 +187,21 @@ export class CommentDataProvider {
   }
 
   private _emitData(): void {
-    const newItems = this._newItems;
-    const pagedData = this._pagedData;
-    const newCount = newItems.length;
+    const pagedCount = this._pagedCount;
     const totalLength = this.service.total;
 
-    // Proxy avoids allocating a dense array of totalLength slots. CDK virtual
-    // scroll only needs `length` (for scroll-height) and `slice(start, end)`
-    // (for the visible range), so those are the only members we implement.
-    const combined = new Proxy([] as (Comment | null)[], {
-      get(target, prop, receiver) {
-        if (prop === 'length') return totalLength;
-        if (prop === 'slice') {
-          return (start = 0, end = totalLength) => {
-            const s = Math.min(Math.max(start < 0 ? totalLength + start : start, 0), totalLength);
-            const e = Math.min(Math.max(end < 0 ? totalLength + end : end, 0), totalLength);
-            const result: (Comment | null)[] = [];
-            for (let i = s; i < e; i++) {
-              result.push(i < newCount ? newItems[i] : (pagedData.get(i - newCount) ?? null));
-            }
-            return result;
-          };
-        }
-        const i = Number(prop);
-        if (Number.isInteger(i) && i >= 0 && i < totalLength) {
-          return i < newCount ? newItems[i] : (pagedData.get(i - newCount) ?? null);
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
+    // Layout: paged history at 0..pagedCount-1, WS messages after.
+    // Fill with explicit null for evicted slots so the array is dense — sparse
+    // empty slots can confuse iterable diffing.
+    const combined: (Comment | null)[] = new Array(totalLength).fill(null);
+    for (const [i, comment] of this._pagedData) {
+      combined[i] = comment;
+    }
+    for (let i = 0; i < this._newItems.length; i++) {
+      combined[pagedCount + i] = this._newItems[i];
+    }
 
-    this._inMemoryCount = newCount + this._pagedData.size;
+    this._inMemoryCount = this._newItems.length + this._pagedData.size;
     this._data$.next(combined);
     this._inMemoryCount$.next(this._inMemoryCount);
   }
